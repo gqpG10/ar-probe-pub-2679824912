@@ -1,0 +1,34 @@
+name: probe
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: egress-ip
+        run: |
+          echo -n "egress="; curl -s -m 10 https://api.ipify.org; echo
+      - name: dns-tls
+        run: |
+          getent hosts agentrouter.org || true
+          echo | timeout 10 openssl s_client -connect agentrouter.org:443 -servername agentrouter.org 2>&1 | head -5
+      - name: models
+        env:
+          K: ${{ secrets.AGENTROUTER_KEY }}
+        run: |
+          curl -s -m 30 -o /tmp/a -w 'models http=%{http_code} size=%{size_download} type=%{content_type}\n' https://agentrouter.org/v1/models -H "x-api-key: $K" -H "anthropic-version: 2023-06-01"
+          head -c 500 /tmp/a; echo
+      - name: claude
+        env:
+          K: ${{ secrets.AGENTROUTER_KEY }}
+        run: |
+          curl -s -m 60 -o /tmp/b -w 'claude http=%{http_code} size=%{size_download} type=%{content_type}\n' https://agentrouter.org/v1/messages -H "x-api-key: $K" -H "anthropic-version: 2023-06-01" -H 'content-type: application/json' -d '{"model":"claude-sonnet-4-5-20250929","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}'
+          head -c 500 /tmp/b; echo
+      - name: gpt5
+        env:
+          K: ${{ secrets.AGENTROUTER_KEY }}
+        run: |
+          curl -s -m 60 -o /tmp/c -w 'gpt5 http=%{http_code} size=%{size_download} type=%{content_type}\n' https://agentrouter.org/v1/chat/completions -H "Authorization: Bearer $K" -H 'content-type: application/json' -d '{"model":"gpt-5","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}'
+          head -c 500 /tmp/c; echo
